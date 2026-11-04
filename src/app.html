@@ -162,6 +162,24 @@ input[type=range]{accent-color:var(--ink);width:100%}
 .mini{font-size:11px;color:var(--muted)}
 .bd-sub td{color:var(--ink-2);font-size:11.5px;padding:4px 10px}
 .bd-cat td{font-weight:600;background:#fbfcfd}
+.rate{display:inline-flex;gap:3px;align-items:center}
+.rate button{min-width:25px;height:25px;border:1px solid var(--border-2);background:#fff;border-radius:5px;font-size:11.5px;font-weight:600;color:var(--ink-2);padding:0 6px}
+.rate button:hover{border-color:var(--ink);color:var(--ink)}
+.rate button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.rate button.na{margin-left:4px;font-weight:500}
+.rate button.na.on{background:#6b7588;border-color:#6b7588}
+.tabs{display:flex;border-bottom:1px solid var(--border);gap:2px;margin:4px 0 6px;flex-wrap:wrap}
+.tabs button{border:0;background:none;padding:8px 12px;font-weight:550;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;align-items:center;gap:6px}
+.tabs button:hover{color:var(--ink)}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--red)}
+.tabsc{font-size:10.5px;background:#eef1f6;border-radius:10px;padding:1px 6px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.pdot{width:7px;height:7px;border-radius:50%;background:#e39a00;display:inline-block}
+.rsel{height:26px;padding:1px 2px;font-size:12px;width:52px;font-weight:600;text-align:center}
+.rsel.pend{border-color:#e39a00;background:#fff8eb}
+.rsel.v1{background:#fbeaea}.rsel.v2{background:#fdf1e6}.rsel.v3{background:#f6f6f2}.rsel.v4{background:#eaf5ee}.rsel.v5{background:#dcefe3}
+.progress{height:6px;border-radius:3px;background:#edf0f4;overflow:hidden}
+.progress b{display:block;height:100%;background:var(--core)}
+td.dcell{color:var(--muted);background:#fafbfc}
 hr.sep{border:0;border-top:1px solid var(--border);margin:12px 0}
 </style>
 </head>
@@ -208,7 +226,7 @@ function fmtR(v,d){ if(v==null||isNaN(v)) return '—'; const s=v<0?'-':''; v=Ma
   if(v>=1e6) return s+'R'+(v/1e6).toFixed(d??1)+'m';
   if(v>=1e3) return s+'R'+(v/1e3).toFixed(d??0)+'k';
   return s+'R'+v.toFixed(0);}
-function fmtN(v,d=0){ if(v==null||isNaN(v)) return '—'; return v.toLocaleString('en-ZA',{maximumFractionDigits:d,minimumFractionDigits:d}).replace(/,/g,' ');}
+function fmtN(v,d=0){ if(v==null||isNaN(v)) return '—'; return v.toLocaleString('en-US',{maximumFractionDigits:d,minimumFractionDigits:d}).replace(/,/g,' ');}
 function fmtCases(v){ if(v==null) return '—'; if(Math.abs(v)>=1e6) return (v/1e6).toFixed(2)+'m'; if(Math.abs(v)>=1e3) return (v/1e3).toFixed(0)+'k'; return fmtN(v);}
 function fmtP(v,d=1){ return v==null||isNaN(v)?'—':(v*100).toFixed(d)+'%';}
 function fmtD(v,d=1){ if(v==null||isNaN(v)) return '<span class="mini">n/a</span>'; const c=v>0.0005?'up':v<-0.0005?'down':''; return `<span class="${c}">${v>0?'+':''}${(v*100).toFixed(d)}%</span>`;}
@@ -356,68 +374,124 @@ const TOT_REV=sum(SKUS.map(s=>ECO[s.code].rev)), TOT_GP=sum(SKUS.map(s=>ECO[s.co
 /* =========================================================================
    SCORING ENGINE (pure)
    ========================================================================= */
-const DEFAULT_WEIGHTS={fin:30,vol:20,mfg:15,log:10,grow:10,strat:10,dist:5};
-const CATS=[
- {k:'fin',name:'Financial Performance',type:'Objective',subs:[
-   {k:'gpAbs',name:'Gross profit contribution',get:(s,e)=>e.gp,fmt:fmtR},
-   {k:'gm',name:'Gross margin %',get:(s,e)=>e.gm,fmt:v=>fmtP(v)},
-   {k:'revShare',name:'Revenue contribution',get:(s,e)=>e.rev/TOT_REV,fmt:v=>fmtP(v,2)},
-   {k:'cm',name:'Contribution margin %',get:(s,e)=>e.cmPct,fmt:v=>fmtP(v)}]},
- {k:'vol',name:'Sales Volume',type:'Objective',subs:[
-   {k:'cases',name:'Annual volume (cases)',get:(s,e)=>e.ageMonths<18?e.runRateVol:e.vol,fmt:fmtCases,note:(s,e)=>e.ageMonths<18?'New product: annualised 3-month run-rate used':null},
-   {k:'velocity',name:'Rate of sale (cases per wtd. dist. pt)',get:(s,e)=>e.velocity,fmt:v=>fmtN(v)}]},
- {k:'mfg',name:'Manufacturing Complexity',type:'Objective',subs:[
-   {k:'cx',name:'Complexity index (1–10, lower better)',get:s=>s.cx,inv:true,fmt:v=>v+'/10'},
-   {k:'chg',name:'Changeover time (min, lower better)',get:s=>s.chg,inv:true,fmt:v=>v+' min',na:'Purchased – not produced in-house'},
-   {k:'batch',name:'Average batch size (cases)',get:s=>s.batch,fmt:fmtCases,na:'Purchased – not produced in-house'},
-   {k:'eff',name:'Line efficiency (OEE)',get:s=>s.eff,fmt:v=>fmtP(v,0),na:'Purchased – not produced in-house'}]},
- {k:'log',name:'Logistics Efficiency',type:'Objective',subs:[
-   {k:'inv',name:'Inventory days (lower better)',get:s=>s.invDays,inv:true,fmt:v=>v+' days'},
-   {k:'pal',name:'Pallet positions per R1m revenue',get:(s,e)=>e.palletsPerRm,inv:true,fmt:v=>fmtN(v,1)},
-   {k:'lcx',name:'Logistics complexity (1–10)',get:s=>s.logCx,inv:true,fmt:v=>v+'/10'}]},
- {k:'grow',name:'Growth Potential',type:'Objective',subs:[
-   {k:'rg',name:'Revenue growth (YoY)',get:(s,e)=>e.revGrowth,fmt:v=>fmtP(v),na:'Less than 24 months of history'},
-   {k:'vg',name:'Volume growth (YoY)',get:(s,e)=>e.volGrowth,fmt:v=>fmtP(v),na:'Less than 24 months of history'},
-   {k:'cagr',name:'3-year revenue CAGR',get:(s,e)=>e.cagr,fmt:v=>fmtP(v),na:'Less than 48 months of history'},
-   {k:'lc',name:'Lifecycle stage',get:(s,e)=>({New:80,Growth:90,Mature:50,Declining:15})[e.lifecycle],abs:true,fmt:(v,s,e)=>e.lifecycle}]},
- {k:'strat',name:'Strategic Importance',type:'Management assessment',subs:[
-   {k:'si',name:'Strategic importance rating (1–5)',get:s=>s.strategic,abs:v=>(v-1)/4*100,fmt:v=>v+'/5'},
-   {k:'inc',name:'Estimated incrementality',get:s=>s.incr,abs:v=>clamp(v/0.5,0,1)*100,fmt:v=>fmtP(v,0)},
-   {k:'role',name:'Portfolio role',get:s=>s.role,abs:v=>({Hero:100,Core:75,Growth:80,Premium:70,'Range-completer':60,Flanker:35,Tail:15})[v],fmt:v=>v}]},
- {k:'dist',name:'Distribution',type:'Objective',subs:[
-   {k:'nd',name:'Numeric distribution',get:s=>s.numDist,fmt:v=>fmtP(v,0)},
-   {k:'wd',name:'Weighted distribution',get:s=>s.wtdDist,fmt:v=>fmtP(v,0)},
-   {k:'cust',name:'Active customers',get:s=>s.customers,fmt:v=>fmtN(v)}]},
+const DEFAULT_WEIGHTS={fin:30,com:25,mfg:20,log:15,sc:10};
+// Each department owns a set of criteria: 'data' = calculated from system data (portfolio percentile, 0–100),
+// 'rated' = scored 1–5 by the department (1→0, 5→100). Criterion weights within a department sum to 100.
+const DEPTS=[
+ {k:'fin',name:'Finance',short:'FIN',crit:[
+   {k:'gm',name:'Gross margin %',src:'data',w:30,get:(s,e)=>e.gm,fmt:v=>fmtP(v)},
+   {k:'cm',name:'Contribution margin %',src:'data',w:20,get:(s,e)=>e.cmPct,fmt:v=>fmtP(v)},
+   {k:'gpAbs',name:'Gross profit contribution',src:'data',w:25,get:(s,e)=>e.gp,fmt:fmtR},
+   {k:'price',name:'Pricing power',src:'rated',w:15,help:'Ability to take price increases without losing volume',lo:'Highly price-sensitive',hi:'Strong pricing power'},
+   {k:'wc',name:'Working capital tie-up',src:'rated',w:10,help:'Stock, bottle deposits and debtor days tied up in the SKU',lo:'Heavy tie-up',hi:'Minimal tie-up'}]},
+ {k:'com',name:'Commercial',short:'COM',crit:[
+   {k:'cases',name:'Annual volume (cases)',src:'data',w:20,get:(s,e)=>e.ageMonths<18?e.runRateVol:e.vol,fmt:fmtCases,note:(s,e)=>e.ageMonths<18?'New product: annualised 3-month run-rate used':null},
+   {k:'rg',name:'Revenue growth (YoY)',src:'data',w:15,get:(s,e)=>e.revGrowth,fmt:v=>fmtP(v),na:'Less than 24 months of history'},
+   {k:'wd',name:'Weighted distribution',src:'data',w:10,get:s=>s.wtdDist,fmt:v=>fmtP(v,0)},
+   {k:'cust',name:'Customer importance',src:'rated',w:15,help:'Importance to key customers, listings and range commitments',lo:'Rarely requested',hi:'Must-stock for key customers'},
+   {k:'chan',name:'Channel relevance',src:'rated',w:10,help:'Fit with priority channels and consumption occasions',lo:'Weak channel fit',hi:'Critical in priority channels'},
+   {k:'comp',name:'Competitive position',src:'rated',w:10,help:'Strength versus competing products on shelf',lo:'Easily substituted',hi:'Category leader'},
+   {k:'strat',name:'Strategic importance',src:'rated',w:20,help:'Role in brand and portfolio strategy (management assessment)',lo:'Non-strategic',hi:'Strategically essential'}]},
+ {k:'mfg',name:'Manufacturing',short:'MFG',crit:[
+   {k:'speed',name:'Production speed',src:'rated',w:20,help:'Line rate achieved when running this SKU',lo:'Slow / line constrained',hi:'Full line speed'},
+   {k:'steps',name:'Process simplicity',src:'rated',w:15,help:'Number of process steps and manual interventions',lo:'Many steps / manual',hi:'Few, automated steps'},
+   {k:'chgEase',name:'Ease of changeover',src:'rated',w:20,help:'Time and effort to change to / from this SKU',lo:'Long, complex changeover',hi:'Quick, simple changeover'},
+   {k:'quality',name:'Quality & first-pass yield',src:'rated',w:15,help:'Quality holds, rework and waste (co-packer quality for purchased SKUs)',lo:'Frequent quality issues',hi:'Right first time'},
+   {k:'eff',name:'Line efficiency (OEE)',src:'data',w:15,get:s=>s.eff,fmt:v=>fmtP(v,0),na:'Purchased – not produced in-house'},
+   {k:'batch',name:'Average batch size',src:'data',w:15,get:s=>s.batch,fmt:fmtCases,na:'Purchased – not produced in-house'}]},
+ {k:'log',name:'Logistics',short:'LOG',crit:[
+   {k:'load',name:'Ease of loading / palletising',src:'rated',w:20,help:'Pallet build, load stability and truck fill',lo:'Difficult, unstable loads',hi:'Fast, stable full pallets'},
+   {k:'store',name:'Ease of storage / stacking',src:'rated',w:20,help:'Stack height, racking and special storage needs',lo:'Low stacking / special storage',hi:'High stacking, standard racking'},
+   {k:'damage',name:'Handling & damage risk',src:'rated',w:15,help:'Breakage, dents and leakers in warehouse and transit',lo:'High damage risk',hi:'Robust'},
+   {k:'shelf',name:'Shelf life & stock rotation',src:'rated',w:15,help:'Code-date risk and ease of FIFO rotation',lo:'Short life, write-off risk',hi:'Long life, easy rotation'},
+   {k:'inv',name:'Inventory days',src:'data',w:15,get:s=>s.invDays,inv:true,fmt:v=>v+' days'},
+   {k:'pal',name:'Pallet positions per R1m revenue',src:'data',w:15,get:(s,e)=>e.palletsPerRm,inv:true,fmt:v=>fmtN(v,1)}]},
+ {k:'sc',name:'Supply Chain',short:'SC',crit:[
+   {k:'avail',name:'Material availability & supply security',src:'rated',w:25,help:'Risk of shortages of concentrate, packaging, CO2, closures',lo:'Frequent shortages',hi:'Secure, multi-sourced'},
+   {k:'lead',name:'Supplier lead times',src:'rated',w:20,help:'Length and reliability of material lead times',lo:'Long / unreliable',hi:'Short, reliable'},
+   {k:'shared',name:'Shared vs unique materials',src:'rated',w:20,help:'Flavours, labels, closures or packaging used only by this SKU',lo:'Mostly unique materials',hi:'Fully shared materials'},
+   {k:'moq',name:'MOQ & supplier flexibility',src:'rated',w:15,help:'Minimum order quantities and flexibility to change volumes',lo:'High MOQs, inflexible',hi:'Low MOQs, flexible'},
+   {k:'local',name:'Local sourcing',src:'rated',w:20,help:'Exposure to imported materials and exchange rates',lo:'Import-dependent, FX exposed',hi:'Locally sourced'}]},
 ];
+const DEPT=Object.fromEntries(DEPTS.map(d=>[d.k,d]));
+const RATING_DATE='2026-10-28';
 // percentile rank 0..100 among available values
 function pctRank(vals,v,inv){ const a=vals.filter(x=>x!=null); if(a.length<2) return 50; let lo=0,eq=0; for(const x of a){ if(x<v) lo++; else if(x===v) eq++; } let p=(lo+(eq-1)/2)/(a.length-1)*100; return inv?100-p:p; }
-// pre-compute raw values + normalised sub-scores (independent of weights)
-const RAWV={}, SUBS={};
+// data criteria: raw values + percentile scores (static)
+const DATA_RAW={}, DATA_SC={};
 (function(){
-  for(const c of CATS) for(const sm of c.subs){
-    const vals=SKUS.map(s=>{const v=sm.get(s,ECO[s.code]); return v==null||Number.isNaN(v)?null:v;});
-    SKUS.forEach((s,i)=>{
-      RAWV[s.code]??={}; SUBS[s.code]??={};
-      const v=vals[i]; RAWV[s.code][sm.k]=v;
-      let sc=null;
-      if(v!=null){ if(sm.abs===true) sc=v; else if(typeof sm.abs==='function') sc=sm.abs(v); else sc=pctRank(vals,v,sm.inv); }
-      SUBS[s.code][sm.k]=sc==null?null:Math.round(sc*10)/10;
-    });
+  for(const d of DEPTS) for(const c of d.crit) if(c.src==='data'){
+    const vals=SKUS.map(s=>{const v=c.get(s,ECO[s.code]); return v==null||Number.isNaN(v)?null:v;});
+    SKUS.forEach((s,i)=>{ (DATA_RAW[s.code]??={})[c.k]=vals[i]; (DATA_SC[s.code]??={})[c.k]= vals[i]==null?null:Math.round(pctRank(vals,vals[i],c.inv)*10)/10; });
   }
 })();
-function categoryScores(code){
+// pre-filled department ratings (as submitted by each department) — deterministic
+const DEFAULT_RATINGS=(function(){
+  const rr=mulberry32(4242), j=(a=0.9)=>(rr()-.5)*a, r5=v=>clamp(Math.round(v),1,5);
+  const can=s=>/Can$/.test(s.pack), pet=s=>/PET/.test(s.pack), mp=s=>/Multipack/.test(s.pack), rgb=s=>s.lineCode==='L4', glass=s=>/Glass/.test(s.pack);
+  const COMP={'Coca-Cola':5,'Coca-Cola No Sugar':4,'Sprite':3.4,'Fanta':3.3,'Schweppes':3.6,'Powerade':3.4,'Bonaqua':2.6,'Appletiser':4};
+  const niche=s=>['Fanta Pineapple','Fanta Grape','Dry Lemon','Berry Ice','Grape'].includes(s.subBrand);
+  // departments still to submit (shows the workflow)
+  const PENDING={sc:['CNS-440C','APL-GR-300C','BQ-SP-1500P'],log:['APL-GR-300C']};
   const out={};
-  for(const c of CATS){ const scs=c.subs.map(sm=>SUBS[code][sm.k]); const a=avg(scs); out[c.k]={score:a,avail:scs.filter(x=>x!=null).length,total:scs.length}; }
+  for(const s of SKUS){ const e=ECO[s.code]; const o=out[s.code]={};
+    const V={
+      price: 1+(e.gm-0.2)*11+(s.strategic-3)*0.5+j(),
+      wc: (s.invDays<15?5:s.invDays<20?4:s.invDays<28?3:s.invDays<38?2:1)-(rgb(s)?1:0)+j(0.6),
+      cust: 1.2+s.customers/3600+(s.role==='Hero'?0.8:0)+j(),
+      chan: 1+Math.max(...s.chShare)*4+s.wtdDist*1.6+j(),
+      comp: COMP[s.brand]+(s.role==='Tail'?-1.5:s.role==='Flanker'?-1:0)+j(0.6),
+      strat: s.strategic,
+      speed: s.make==='P'?'na':6.2-s.cx*0.55+j(),
+      steps: s.make==='P'?'na':6-s.cx*0.5+j(),
+      chgEase: s.make==='P'?'na':(s.chg<=25?5:s.chg<=35?4:s.chg<=45?3:s.chg<=60?2:1),
+      quality: s.eff?(s.eff-0.66)*19+j():3.6+j(),
+      load: (can(s)?5:pet(s)?4.2:mp(s)?2:rgb(s)?1.8:3)+j(0.6),
+      store: (can(s)?5:pet(s)?4:mp(s)?3:rgb(s)?2:3)+j(0.6),
+      damage: (can(s)?4:pet(s)?4.8:mp(s)?3:rgb(s)?1.4:2.2)+j(0.6),
+      shelf: (can(s)?5:glass(s)?4:s.category==='Water'?4:3)-(s.invDays>35?1:0)+j(0.6),
+      avail: (can(s)||mp(s)?3:pet(s)?4.2:3)-(niche(s)?1:0)+(s.make==='P'?-0.5:0)+j(),
+      lead: (s.make==='P'?2.6:can(s)||mp(s)?3:pet(s)?4.2:3.2)+j(),
+      shared: 5-(niche(s)?2.3:0)-(mp(s)?2:0)-(/440ml/.test(s.pack)?1:0)-(s.brand==='Schweppes'?0.8:0)+j(),
+      moq: ({Hero:5,Core:4,Growth:3.6,Premium:3,'Range-completer':2.6,Flanker:2.4,Tail:1.8})[s.role]+j(),
+      local: (s.brand==='Appletiser'?5:can(s)||mp(s)?2.8:pet(s)?4:3.6)+j(0.6),
+    };
+    for(const d of DEPTS) for(const c of d.crit) if(c.src==='rated'){
+      if((PENDING[d.k]||[]).includes(s.code)) continue;
+      const v=V[c.k]; o[c.k]={v:v==='na'?'na':r5(v),by:d.name+' team',at:RATING_DATE,note:''};
+    }
+  }
+  return out;
+})();
+function getRating(code,k){ return STATE.ratings[code]?.[k] || DEFAULT_RATINGS[code]?.[k] || null; }
+function setRating(code,k,v,note){
+  const cur=getRating(code,k)||{}; (STATE.ratings[code]??={})[k]={v,by:STATE.rater||'Demo user',at:new Date().toISOString().slice(0,10),note:note??cur.note??''};
+  if(v==null) STATE.ratings[code][k]={...STATE.ratings[code][k],v:null};
+}
+function critScore(code,c){
+  if(c.src==='data'){ const v=DATA_SC[code][c.k]; return {score:v,status:v==null?'na':'ok',raw:DATA_RAW[code][c.k]}; }
+  const r=getRating(code,c.k);
+  if(!r||r.v==null) return {score:null,status:'pending',r};
+  if(r.v==='na') return {score:null,status:'na',r};
+  return {score:(r.v-1)*25,status:'ok',r};
+}
+function deptScores(code){
+  const out={};
+  for(const d of DEPTS){ let ws=0,t=0,avail=0,pending=0,na=0;
+    for(const c of d.crit){ const cs=critScore(code,c); if(cs.score!=null){ws+=c.w;t+=c.w*cs.score;avail++;} else if(cs.status==='pending') pending++; else na++; }
+    out[d.k]={score:ws?t/ws:null,avail,pending,na,total:d.crit.length,wAvail:ws};
+  }
   return out;
 }
-const CATSCORE=Object.fromEntries(SKUS.map(s=>[s.code,categoryScores(s.code)]));
+function stratOf(code){ const r=getRating(code,'strat'); return r&&typeof r.v==='number'? r.v : BY_CODE[code].strategic; }
+let CATSCORE={};
 function scorePortfolio(W){
   const rows=SKUS.map(s=>{
     const cs=CATSCORE[s.code]; let ws=0,t=0;
-    for(const c of CATS){ if(cs[c.k].score!=null){ ws+=W[c.k]; t+=W[c.k]*cs[c.k].score; } }
-    const score= ws? t/ws : null;
-    const avail=sum(CATS.map(c=>cs[c.k].avail)), total=sum(CATS.map(c=>cs[c.k].total));
-    return {code:s.code,score,completeness:avail/total};
+    for(const d of DEPTS){ if(cs[d.k].score!=null){ ws+=W[d.k]; t+=W[d.k]*cs[d.k].score; } }
+    const score= ws? t/ws : 0;
+    const avail=sum(DEPTS.map(d=>cs[d.k].avail)), total=sum(DEPTS.map(d=>cs[d.k].total)), pending=sum(DEPTS.map(d=>cs[d.k].pending));
+    return {code:s.code,score,completeness:avail/total,pending};
   });
   const sorted=[...rows].sort((a,b)=>b.score-a.score);
   sorted.forEach((r,i)=>{r.rank=i+1; r.pct=Math.round((1-i/(sorted.length-1))*100);});
@@ -437,13 +511,13 @@ const ACTIONS={
   exit:{label:'Exit Candidate',color:'var(--exit)',hex:'#b8232b',bg:'#fbeaeb',ic:'✕'},
 };
 const ACTION_KEYS=Object.keys(ACTIONS);
-function isStrategicException(s,e,score){ return s.strategic>=4 && score<45; }
+function isStrategicException(s,e,score){ return stratOf(s.code)>=4 && score<45; }
 function recommend(s,e,r,cs){
   const sc=r.score;
   if(e.lifecycle==='New') return 'grow';
   if(isStrategicException(s,e,sc)) return 'review';
   if(sc>=62) return 'core';
-  if((cs.grow.score??0)>=70 && sc>=45) return 'grow';
+  if((DATA_SC[s.code].rg??0)>=70 && sc>=45) return 'grow';
   if(sc>=47) return 'fix';
   if(sc>=37) return 'review';
   return 'exit';
@@ -452,7 +526,7 @@ function quadrantOf(x,y,tx,ty){ return y>=ty ? (x>=tx?'golden':'protect') : (x>=
 const QUADS={golden:{t:'GOLDEN QUADRANT',r:'Keep / Grow'},protect:{t:'PROTECT / FIX',r:'Protect; grow volume or distribution'},fix:{t:'FIX',r:'Improve pricing, cost, efficiency or pack economics'},review:{t:'REVIEW / EXIT',r:'Investigate rationalisation, subject to strategy'}};
 function explain(code,W){
   const s=BY_CODE[code], e=ECO[code], cs=CATSCORE[code], r=SCORES[code];
-  const ranked=CATS.filter(c=>cs[c.k].score!=null).map(c=>({c,sc:cs[c.k].score})).sort((a,b)=>b.sc-a.sc);
+  const ranked=DEPTS.filter(c=>cs[c.k].score!=null).map(c=>({c,sc:cs[c.k].score})).sort((a,b)=>b.sc-a.sc);
   const strong=ranked.slice(0,2).filter(x=>x.sc>=55).map(x=>`${x.c.name.toLowerCase()} (${x.sc.toFixed(0)})`);
   const weak=ranked.slice(-2).filter(x=>x.sc<50).map(x=>`${x.c.name.toLowerCase()} (${x.sc.toFixed(0)})`);
   const reasons=[];
@@ -460,7 +534,7 @@ function explain(code,W){
   if(weak.length) reasons.push('Weak on '+weak.join(' and '));
   const cons=[];
   if(e.lifecycle==='New') cons.push(`New launch (${e.ageMonths} months) – assessed on run-rate and momentum, not absolute volume`);
-  if(isStrategicException(s,e,r.score)) cons.push(`Strategic importance ${s.strategic}/5 overrides weak score – management review required`);
+  if(isStrategicException(s,e,r.score)) cons.push(`Strategic importance ${stratOf(code)}/5 overrides weak score – management review required`);
   if(s.chShare[4]>0.4) cons.push(`On-premise critical (${fmtP(s.chShare[4],0)} of sales) – check outlet range commitments`);
   if(s.role==='Range-completer') cons.push('Range-completer – removal may weaken mixer offer');
   if(s.make==='P') cons.push('Purchased SKU – manufacturing savings limited to handling');
@@ -473,15 +547,18 @@ function explain(code,W){
    STATE (local storage)
    ========================================================================= */
 const STATE={
-  weights: store('weights')||{...DEFAULT_WEIGHTS},
+  weights: (w=>w&&Object.keys(w).join()===Object.keys(DEFAULT_WEIGHTS).join()?w:null)(store('weights2'))||{...DEFAULT_WEIGHTS},
+  ratings: store('ratings')||{},      // code -> criterion -> {v,by,at,note} (edits on top of pre-filled)
+  rater: store('rater')||'',
   overrides: store('overrides')||{},   // code -> {action, reason, status}
   scenario: store('scenario')||null,
   saved: store('saved')||null,
   dept: store('dept')||'Executive',
   F:{brand:'All',category:'All',channel:'All',region:'All',period:'L12M'},
 };
-let SCORES=scorePortfolio(STATE.weights);
-const BASE_SCORES=scorePortfolio(DEFAULT_WEIGHTS);
+let SCORES, BASE_SCORES;
+function recomputeAll(){ CATSCORE=Object.fromEntries(SKUS.map(s=>[s.code,deptScores(s.code)])); SCORES=scorePortfolio(STATE.weights); BASE_SCORES=scorePortfolio(DEFAULT_WEIGHTS); }
+recomputeAll();
 function finalAction(code){ const o=STATE.overrides[code]; return o&&o.action? o.action : SCORES[code].action; }
 function decisionStatus(code){ const o=STATE.overrides[code]; return (o&&o.status)||'Proposed'; }
 
@@ -534,7 +611,7 @@ function calcScenario(sc){
 // auto-select lowest-scoring, non-protected SKUs to meet a target reduction
 function autoSelect(pct){
   const n=Math.round(SKUS.length*pct/100);
-  return SKUS.filter(s=>!(ECO[s.code].lifecycle==='New') && !(s.strategic>=4) && s.role!=='Hero')
+  return SKUS.filter(s=>!(ECO[s.code].lifecycle==='New') && !(stratOf(s.code)>=4) && s.role!=='Hero')
     .sort((a,b)=>SCORES[a.code].score-SCORES[b.code].score).slice(0,n).map(s=>s.code);
 }
 function presetScenarios(){
@@ -542,7 +619,7 @@ function presetScenarios(){
 }
 if(!STATE.saved){ STATE.saved=presetScenarios(); store('saved',STATE.saved); }
 if(!STATE.scenario){ STATE.scenario=newScenario(); }
-function persist(){ store('weights',STATE.weights); store('overrides',STATE.overrides); store('scenario',STATE.scenario); store('saved',STATE.saved); store('dept',STATE.dept); }
+function persist(){ store('weights2',STATE.weights); store('ratings',STATE.ratings); store('rater',STATE.rater); store('overrides',STATE.overrides); store('scenario',STATE.scenario); store('saved',STATE.saved); store('dept',STATE.dept); }
 
 /* =========================================================================
    CHART PRIMITIVES (SVG / HTML, no dependencies)
@@ -617,6 +694,7 @@ document.addEventListener('mousemove',e=>{ const t=e.target.closest&&e.target.cl
    SHELL: navigation, filters, departments
    ========================================================================= */
 const ICONS={
+  rate:'<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
   dash:'<path d="M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z"/>',
   quad:'<path d="M12 3v18M3 12h18"/><circle cx="17" cy="7" r="2.2"/><circle cx="7" cy="16" r="1.5"/>',
   sku:'<path d="M4 6h16M4 12h16M4 18h10"/>',
@@ -628,7 +706,8 @@ const ROUTES=[
   {h:'dashboard',t:'Executive Dashboard',i:'dash',sec:'Portfolio'},
   {h:'quadrant',t:'Golden Quadrant',i:'quad'},
   {h:'skus',t:'SKU Intelligence',i:'sku'},
-  {h:'scoring',t:'Scoring Engine',i:'score',sec:'Optimisation'},
+  {h:'ratings',t:'Department Ratings',i:'rate',sec:'Optimisation'},
+  {h:'scoring',t:'Scoring Engine',i:'score'},
   {h:'scenario',t:'Scenario Simulator',i:'scen'},
   {h:'recs',t:'Executive Recommendations',i:'rec',sec:'Decisions'},
 ];
@@ -835,7 +914,7 @@ function tableColumns(){
     eff:{t:'OEE',n:1,v:r=>r.s.eff,h:r=>r.s.eff==null?'<span class="tag na">n/a</span>':fmtP(r.s.eff,0)},
     line:{t:'Line',v:r=>r.s.line},
     inv:{t:'Inv. days',n:1,v:r=>r.s.invDays},
-    strat:{t:'Strategic',n:1,v:r=>r.s.strategic,h:r=>'★'.repeat(r.s.strategic)+'<span style="color:#dde1e8">'+'★'.repeat(5-r.s.strategic)+'</span>'},
+    strat:{t:'Strategic',n:1,v:r=>stratOf(r.s.code),h:r=>'★'.repeat(stratOf(r.s.code))+'<span style="color:#dde1e8">'+'★'.repeat(5-stratOf(r.s.code))+'</span>'},
     score:{t:'Score',n:1,v:r=>r.sc.score,h:r=>scoreHTML(r.sc.score)},
     act:{t:'Recommended action',v:r=>ACTION_KEYS.indexOf(finalAction(r.s.code)),h:r=>pillHTML(finalAction(r.s.code)),csv:r=>ACTIONS[finalAction(r.s.code)].label},
   };
@@ -897,8 +976,9 @@ function viewSku(el,code){
   const s=BY_CODE[code]; if(!s){ el.innerHTML='<div class="empty">SKU not found</div>'; return; }
   const e=ECO[code], sc=SCORES[code], cs=CATSCORE[code], W=STATE.weights, act=finalAction(code), ex=explain(code);
   const inScen=STATE.scenario.removed.includes(code);
-  const wsum=sum(CATS.filter(c=>cs[c.k].score!=null).map(c=>W[c.k]));
+  const wsum=sum(DEPTS.filter(d=>cs[d.k].score!=null).map(d=>W[d.k]));
   const subsList=substitutes(code);
+  if(!DEPT[SKUTAB]) SKUTAB='fin';
   el.innerHTML=`
    <div class="crumbs"><a href="#/skus">SKU Intelligence</a> / ${s.category} › ${s.brand} › ${s.subBrand} › ${s.pack} › <b>${s.code}</b></div>
    <div class="row" style="justify-content:space-between;align-items:flex-start;margin-bottom:14px">
@@ -908,7 +988,15 @@ function viewSku(el,code){
        <button class="btn ${inScen?'':'red'}" id="addScen">${inScen?'✓ In scenario – remove':'+ Add to scenario'}</button></div>
    </div>
    <div class="kpis k8">
-     ${[['Revenue (L12M)',fmtR(e.rev),fmtD(e.revGrowth)+' YoY'],['Volume (cases)',fmtCases(e.vol),fmtD(e.volGrowth)+' YoY'],['Gross profit',fmtR(e.gp),fmtP(e.gp/TOT_GP)+' of portfolio'],['Gross margin',fmtP(e.gm),'Contribution '+fmtP(e.cmPct)],['Weighted score',sc.score.toFixed(1),`Rank #${sc.rank} of ${SKUS.length} · P${sc.pct}`],['3-yr CAGR',e.cagr==null?'<span class="mini" style="font-size:14px">Unavailable</span>':fmtP(e.cagr),e.cagr==null?'Under 48 months history':''],['Weighted distribution',fmtP(s.wtdDist,0),'Numeric '+fmtP(s.numDist,0)+' · '+fmtN(s.customers)+' outlets'],['Data completeness',fmtP(sc.completeness,0),sc.completeness<1?'Some metrics unavailable':'All metrics available']].map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v">${k[1]}</div><div class="d">${k[2]}</div></div>`).join('')}
+     ${[['Revenue (L12M)',fmtR(e.rev),fmtD(e.revGrowth)+' YoY'],['Volume (cases)',fmtCases(e.vol),fmtD(e.volGrowth)+' YoY'],['Gross profit',fmtR(e.gp),fmtP(e.gp/TOT_GP)+' of portfolio'],['Gross margin',fmtP(e.gm),'Contribution '+fmtP(e.cmPct)],['Weighted score',sc.score.toFixed(1),`Rank #${sc.rank} of ${SKUS.length} · P${sc.pct}`],['3-yr CAGR',e.cagr==null?'<span class="mini" style="font-size:14px">Unavailable</span>':fmtP(e.cagr),e.cagr==null?'Under 48 months history':''],['Weighted distribution',fmtP(s.wtdDist,0),'Numeric '+fmtP(s.numDist,0)+' · '+fmtN(s.customers)+' outlets'],['Input completeness',fmtP(sc.completeness,0),sc.pending?`${sc.pending} ratings awaiting input`:sc.completeness<1?'Some metrics N/A':'All inputs available']].map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v">${k[1]}</div><div class="d">${k[2]}</div></div>`).join('')}
+   </div>
+   <div class="grid" style="grid-template-columns:minmax(330px,1fr) 2.1fr;margin-bottom:14px;align-items:start">
+     <div class="card"><h3>Department scorecard</h3><p class="cap">Department score (0–100) × weight = contribution to the overall SKU score. Pending or N/A inputs are excluded, not zeroed. Click a department to view its ratings.</p>
+       <table><thead><tr><th>Department</th><th class="n">Score</th><th class="n">Weight</th><th class="n">Contrib.</th><th class="n">Inputs</th></tr></thead><tbody>
+       ${DEPTS.map(d=>{const c=cs[d.k]; const wEff=c.score==null?0:W[d.k]/wsum; return `<tr class="click" data-tab="${d.k}" style="${d.k===SKUTAB?'background:#f4f7fb':''}"><td><b>${d.name}</b></td><td class="n">${c.score==null?'<span class="tag na">n/a</span>':scoreHTML(c.score)}</td><td class="n">${W[d.k]}%</td><td class="n"><b>${c.score==null?'—':(c.score*wEff).toFixed(1)}</b></td><td class="n">${c.avail}/${c.total}${c.pending?`<div><span class="tag str">${c.pending} pending</span></div>`:''}</td></tr>`;}).join('')}
+       <tr class="bd-cat"><td>Overall SKU score</td><td></td><td class="n">${wsum}%${wsum<100?'<div class="mini">re-based</div>':''}</td><td class="n" style="font-size:15px"><b>${sc.score.toFixed(1)}</b></td><td></td></tr></tbody></table>
+       <div class="mini" style="margin-top:8px">Rank #${sc.rank} of ${SKUS.length} · department weights are set in the <a href="#/scoring">Scoring Engine</a></div></div>
+     <div class="card" id="ratingsPanel"></div>
    </div>
    <div class="grid g21" style="margin-bottom:14px">
      <div class="card"><div class="card-h"><div><h3>Revenue and gross profit – monthly</h3><p class="cap">5-year history${s.isNewLaunch?' · launched '+monthLabel(s.launchIdx)+' (no data before launch)':''}</p></div></div><div id="d-rev"></div></div>
@@ -920,13 +1008,6 @@ function viewSku(el,code){
      <div class="card"><h3>Channel performance</h3><p class="cap">L12M revenue by channel</p><div id="d-ch"></div></div>
    </div>
    <div class="grid g2" style="margin-bottom:14px">
-     <div class="card"><h3>Weighted score breakdown</h3><p class="cap">Underlying values → normalised 0–100 sub-scores (portfolio percentile) → category score × weight = contribution. Unavailable metrics are excluded, not zeroed.</p>
-       <div class="tbl-wrap"><table><thead><tr><th>Category / metric</th><th class="n">Value</th><th class="n">Score</th><th class="n">Weight</th><th class="n">Contribution</th></tr></thead><tbody>
-       ${CATS.map(c=>{ const cc=cs[c.k]; const wEff=cc.score==null?0:W[c.k]/wsum; return `<tr class="bd-cat"><td>${c.name} ${c.type!=='Objective'?'<span class="tag str">MGMT ASSESSMENT</span>':''}</td><td></td><td class="n">${cc.score==null?'<span class="tag na">n/a</span>':cc.score.toFixed(1)}</td><td class="n">${W[c.k]}%</td><td class="n"><b>${cc.score==null?'—':(cc.score*wEff).toFixed(1)}</b></td></tr>`+
-         c.subs.map(sm=>{ const v=RAWV[code][sm.k], ss=SUBS[code][sm.k]; const note=sm.note&&sm.note(s,e); return `<tr class="bd-sub"><td style="padding-left:22px">${sm.name}${note?`<div class="mini" style="color:#1c5cab">${note}</div>`:''}</td><td class="n">${v==null?`<span class="tag na" title="${esc(sm.na||'')}">Unavailable</span>${sm.na?`<div class="mini">${sm.na}</div>`:''}`:sm.fmt(v,s,e)}</td><td class="n">${ss==null?'—':ss.toFixed(0)}</td><td></td><td></td></tr>`;}).join(''); }).join('')}
-       <tr class="bd-cat"><td>Final weighted score</td><td></td><td></td><td class="n">${wsum}%${wsum<100?'<div class="mini">re-based</div>':''}</td><td class="n" style="font-size:14px"><b>${sc.score.toFixed(1)}</b></td></tr>
-       </tbody></table></div></div>
-     <div class="grid" style="align-content:start">
        <div class="card"><h3>Recommendation</h3><div style="margin:8px 0">${pillHTML(act)} <span class="mini">System: ${ACTIONS[sc.action].label}</span></div>
          <div class="note ${act==='exit'?'warn':act==='core'?'ok':''}">${ex.reasons.map(r=>'• '+r).join('<br>')||'Balanced profile across categories'}
          <br><b>Golden Quadrant position:</b> ${QUADS[quadrantOf(e.ageMonths<18?e.runRateVol:e.vol,e.gm,median(SKUS.map(x=>ECO[x.code].vol)),median(SKUS.map(x=>ECO[x.code].gm)))].t} (portfolio medians)</div>
@@ -945,13 +1026,12 @@ function viewSku(el,code){
          <div>Avoidable mfg cost p.a.</div><div>${fmtR(e.avoidMfg)}</div>
          <div>Avoidable logistics cost p.a.</div><div>${fmtR(e.avoidLog)}</div>
          <div>Allocated overhead (not avoidable)</div><div>${fmtR(e.overhead)}</div></div></div>
-     </div>
    </div>
    <div class="grid g2">
      <div class="card"><h3>Regional distribution</h3><p class="cap">L12M revenue by sub-area</p><div id="d-rg"></div></div>
      <div class="card"><h3>Potential substitute SKUs</h3><p class="cap">Where volume could migrate if this SKU is removed – similarity by brand, pack and size</p>
        ${subsList.length?`<table><thead><tr><th>SKU</th><th class="n">Revenue</th><th class="n">GM%</th><th class="n">Score</th><th>Action</th></tr></thead><tbody>${subsList.map(o=>`<tr class="click" onclick="location.hash='#/sku/${o.x.code}'"><td><div style="font-weight:550">${esc(o.x.name)}</div><span class="code">${o.x.code}</span></td><td class="n">${fmtR(ECO[o.x.code].rev)}</td><td class="n">${fmtP(ECO[o.x.code].gm)}</td><td class="n">${scoreHTML(SCORES[o.x.code].score)}</td><td>${pillHTML(finalAction(o.x.code))}</td></tr>`).join('')}</tbody></table>`:'<div class="empty">No close substitutes – removal likely to lose most volume</div>'}
-       <div class="note" style="margin-top:10px">Lifecycle: <b>${e.lifecycle}</b> · Strategic importance <b>${s.strategic}/5</b> · Role <b>${s.role}</b> · Est. incrementality <b>${fmtP(s.incr,0)}</b></div></div>
+       <div class="note" style="margin-top:10px">Lifecycle: <b>${e.lifecycle}</b> · Strategic importance <b>${stratOf(code)}/5</b> · Role <b>${s.role}</b> · Est. incrementality <b>${fmtP(s.incr,0)}</b></div></div>
    </div>`;
   const labels=[...Array(MONTHS)].map((_,i)=>monthLabel(i));
   lineChart($('#d-rev'),{labels,series:[{name:'Revenue',color:'var(--s1)',values:s.rev},{name:'Gross profit',color:'var(--s2)',values:s.gp}],h:230});
@@ -962,7 +1042,83 @@ function viewSku(el,code){
   hbars($('#d-ch'),CHANNELS.map((c,k)=>({label:c,value:e.rev*s.chShare[k],color:'var(--s1)',vl:`${fmtR(e.rev*s.chShare[k])} <span class="mini">${fmtP(s.chShare[k],0)}</span>`})));
   hbars($('#d-rg'),REGIONS.map((r,k)=>({label:`${r.a} <span class="mini">${r.p==='Western Cape'?'WC':'NC'}</span>`,value:e.rev*s.rgShare[k],color:r.p==='Western Cape'?'var(--s1)':'var(--s2)'})));
   $('#d-rg').insertAdjacentHTML('afterbegin','<div style="margin-bottom:8px">'+legendHTML([{name:'Western Cape',color:'var(--s1)'},{name:'Northern Cape',color:'var(--s2)'}])+'</div>');
+  renderRatingsPanel($('#ratingsPanel'),code); bindRatingEvents(el,()=>route_());
   $('#addScen').onclick=()=>{ const r=STATE.scenario.removed; const i=r.indexOf(code); if(i>=0) r.splice(i,1); else r.push(code); persist(); toast(i>=0?`${code} removed from working scenario`:`${code} added to working scenario (${r.length} SKUs)`); route_(); };
+}
+
+let SKUTAB='fin';
+function ratingButtons(code,k,v){ return `<span class="rate">${[1,2,3,4,5].map(n=>`<button class="${v===n?'on':''}" data-rate="${code}|${k}|${n}">${n}</button>`).join('')}<button class="na ${v==='na'?'on':''}" data-rate="${code}|${k}|na" title="Not applicable">N/A</button></span>`; }
+function renderRatingsPanel(el,code){
+  const s=BY_CODE[code], e=ECO[code], cs=CATSCORE[code], d=DEPT[SKUTAB];
+  el.innerHTML=`<h3>Department ratings</h3><p class="cap">Each department rates its own criteria 1–5 · system data is calculated automatically · click a rating to change it (click again to clear)</p>
+   <div class="tabs">${DEPTS.map(x=>`<button class="${x.k===SKUTAB?'on':''}" data-tab="${x.k}">${x.name} <span class="tabsc">${cs[x.k].score==null?'n/a':cs[x.k].score.toFixed(0)}</span>${cs[x.k].pending?'<i class="pdot" title="Awaiting ratings"></i>':''}</button>`).join('')}</div>
+   <div class="tbl-wrap" style="border:0"><table><thead><tr><th>Criterion</th><th>Source</th><th>Rating / value</th><th class="n">Score</th><th class="n">Weight</th><th>Rated by</th><th>Comment</th></tr></thead><tbody>
+   ${d.crit.map(c=>{ const r=critScore(code,c); let val;
+     if(c.src==='data'){ const note=c.note&&c.note(s,e); val= r.raw==null?`<span class="tag na">Unavailable</span><div class="mini">${c.na||''}</div>`:`<b class="num">${c.fmt(r.raw)}</b>${note?`<div class="mini" style="color:#1c5cab">${note}</div>`:''}`; }
+     else val=ratingButtons(code,c.k,r.r?.v)+(r.status==='pending'?'<div style="margin-top:3px"><span class="tag str">Awaiting rating</span></div>':'');
+     return `<tr><td style="white-space:normal;min-width:190px"><div style="font-weight:550">${c.name}</div><div class="mini">${c.src==='rated'?`1 = ${c.lo} · 5 = ${c.hi}`:(c.inv?'Lower is better · ':'')+'scored as portfolio percentile'}</div></td>
+       <td><span class="tag ${c.src==='data'?'':'new'}">${c.src==='data'?'System data':'Dept rating'}</span></td><td>${val}</td>
+       <td class="n">${r.score==null?'—':r.score.toFixed(0)}</td><td class="n">${c.w}%</td>
+       <td class="mini">${c.src==='rated'&&r.r&&r.r.v!=null?`${esc(r.r.by)}<br>${r.r.at}`:''}</td>
+       <td>${c.src==='rated'?`<input type="text" class="reason" data-note="${code}|${c.k}" value="${esc(r.r?.note||'')}" placeholder="${r.r&&r.r.v!=null?'Add comment…':''}" ${r.r&&r.r.v!=null?'':'disabled'}>`:''}</td></tr>`;}).join('')}
+   <tr class="bd-cat"><td>${d.name} score</td><td></td><td class="mini" style="font-weight:400">${cs[d.k].avail} of ${cs[d.k].total} inputs available${cs[d.k].pending?` · ${cs[d.k].pending} awaiting rating`:''}${cs[d.k].na?` · ${cs[d.k].na} N/A`:''}</td><td class="n" style="font-size:14px"><b>${cs[d.k].score==null?'n/a':cs[d.k].score.toFixed(1)}</b></td><td class="n">${cs[d.k].wAvail}%${cs[d.k].wAvail<100&&cs[d.k].wAvail>0?'<div class="mini">re-based</div>':''}</td><td></td><td></td></tr>
+   </tbody></table></div>`;
+}
+function applyRating(code,k,val){
+  const before=SCORES[code].score, actB=finalAction(code);
+  setRating(code,k,val); recomputeAll(); persist();
+  const actA=finalAction(code);
+  toast(`${code}: score ${before.toFixed(1)} → ${SCORES[code].score.toFixed(1)}${actA!==actB?` · now ${ACTIONS[actA].label}`:''}`);
+}
+function bindRatingEvents(root,after){
+  $$('[data-rate]',root).forEach(b=>b.onclick=ev=>{ ev.stopPropagation(); const [code,k,v]=b.dataset.rate.split('|'); const val=v==='na'?'na':+v; const cur=getRating(code,k); applyRating(code,k, cur&&cur.v===val? null : val); after(); });
+  $$('[data-note]',root).forEach(i=>i.onchange=()=>{ const [code,k]=i.dataset.note.split('|'); const cur=getRating(code,k); if(!cur) return; (STATE.ratings[code]??={})[k]={...cur,note:i.value}; persist(); toast('Comment saved'); });
+  $$('[data-tab]',root).forEach(t=>t.onclick=()=>{ SKUTAB=t.dataset.tab; after(); });
+}
+
+/* =========================================================================
+   VIEW — DEPARTMENT RATINGS (one department rates all SKUs)
+   ========================================================================= */
+const RSTATE={dept:'log',q:'',pendingOnly:false};
+function viewRatings(el){
+  const d=DEPT[RSTATE.dept], rated=d.crit.filter(c=>c.src==='rated'), data=d.crit.filter(c=>c.src==='data');
+  const q=RSTATE.q.toLowerCase();
+  let rows=SKUS.map(s=>({s,cs:CATSCORE[s.code][d.k]}));
+  const totalCells=SKUS.length*rated.length, done=sum(SKUS.map(s=>rated.filter(c=>{const r=getRating(s.code,c.k); return r&&r.v!=null;}).length));
+  const skusPending=SKUS.filter(s=>CATSCORE[s.code][d.k].pending>0).length;
+  rows=rows.filter(r=>(!q||(r.s.code+' '+r.s.name).toLowerCase().includes(q))&&(!RSTATE.pendingOnly||r.cs.pending>0));
+  const edited=Object.values(STATE.ratings).reduce((n,o)=>n+rated.filter(c=>o[c.k]).length,0);
+  el.innerHTML=`
+   <h1>Department Ratings</h1><p class="sub">Each department rates the SKUs on the criteria it owns. Ratings combine with system data into a department score, which feeds the overall SKU score.</p>
+   <div class="grid" style="grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:14px">${DEPTS.map(x=>{ const rc=x.crit.filter(c=>c.src==='rated'); const tot=SKUS.length*rc.length, dn=sum(SKUS.map(s=>rc.filter(c=>{const r=getRating(s.code,c.k); return r&&r.v!=null;}).length)); const pend=SKUS.filter(s=>CATSCORE[s.code][x.k].pending>0).length;
+     return `<div class="grp ${x.k===RSTATE.dept?'on':''}" data-dept="${x.k}" style="border-top-color:${x.k===RSTATE.dept?'var(--red)':'var(--border-2)'}"><div class="row" style="justify-content:space-between"><b style="font-size:13.5px">${x.name}</b><span class="mini">weight ${STATE.weights[x.k]}%</span></div>
+       <div class="mini" style="margin:4px 0 6px">${rc.length} rated · ${x.crit.length-rc.length} system criteria</div><div class="progress"><b style="width:${dn/tot*100}%"></b></div>
+       <div class="row" style="justify-content:space-between;margin-top:5px"><span class="mini">${fmtP(dn/tot,0)} complete</span>${pend?`<span class="tag str">${pend} SKUs pending</span>`:'<span class="tag" style="background:#e9f6ef;color:#0e6b48">Complete</span>'}</div></div>`;}).join('')}</div>
+   <div class="card" style="padding:0">
+    <div class="row" style="padding:12px 14px;justify-content:space-between">
+      <div><h3>${d.name} ratings – all SKUs</h3><div class="mini">${done} of ${totalCells} ratings captured · ${skusPending} SKUs awaiting input · 1 = poor, 5 = excellent · N/A = not applicable</div></div>
+      <div class="row"><input type="text" id="rQ" placeholder="Search SKU…" value="${esc(RSTATE.q)}" style="width:180px">
+        <label class="row" style="font-size:12px;cursor:pointer;gap:5px"><input type="checkbox" id="rP" ${RSTATE.pendingOnly?'checked':''}> Awaiting only</label>
+        <div class="f"><input type="text" id="rBy" placeholder="Rating as (your name)" value="${esc(STATE.rater)}" style="width:170px"></div>
+        <button class="btn sm" id="rReset" ${edited?'':'disabled'}>Reset ${d.name} to submitted</button></div>
+    </div>
+    <div class="tbl-wrap" style="border:0;border-top:1px solid var(--border);border-radius:0 0 var(--r) var(--r);max-height:calc(100vh - 330px)"><table><thead><tr><th>SKU</th>
+      ${rated.map(c=>`<th style="white-space:normal;min-width:84px;vertical-align:bottom" data-tip="${esc(`<b>${c.name}</b><br>${c.help||''}<br><span class=m>1 = ${c.lo}<br>5 = ${c.hi}</span><br>Weight ${c.w}%`)}">${c.name}<div class="mini" style="font-weight:400">${c.w}%</div></th>`).join('')}
+      ${data.map(c=>`<th class="n" style="white-space:normal;min-width:80px;vertical-align:bottom;background:#f3f5f8" data-tip="${esc(`<b>${c.name}</b><br>From system data – portfolio percentile${c.inv?' (lower is better)':''}<br>Weight ${c.w}%`)}">${c.name}<div class="mini" style="font-weight:400">system · ${c.w}%</div></th>`).join('')}
+      <th class="n" style="vertical-align:bottom">${d.name} score</th><th class="n" style="vertical-align:bottom">Overall</th></tr></thead><tbody>
+    ${rows.map(({s,cs})=>`<tr><td><a href="#/sku/${s.code}" style="text-decoration:none;font-weight:550">${esc(s.name)}</a>${ECO[s.code].lifecycle==='New'?'<span class="tag new">NEW</span>':''}<div class="code">${s.code}</div></td>
+      ${rated.map(c=>{const r=getRating(s.code,c.k); const v=r?r.v:null; const edited=!!STATE.ratings[s.code]?.[c.k];
+        return `<td><select class="rsel ${v==null?'pend':typeof v==='number'?'v'+v:''}" data-cell="${s.code}|${c.k}" title="${r&&v!=null?esc(r.by+' · '+r.at+(r.note?' · '+r.note:'')):'Awaiting rating'}"><option value="" ${v==null?'selected':''}>–</option>${[1,2,3,4,5].map(n=>`<option ${v===n?'selected':''}>${n}</option>`).join('')}<option value="na" ${v==='na'?'selected':''}>N/A</option></select>${edited?'<span title="Edited" style="color:var(--red);font-size:9px;margin-left:2px">●</span>':''}</td>`;}).join('')}
+      ${data.map(c=>{const raw=DATA_RAW[s.code][c.k]; return `<td class="n dcell">${raw==null?'<span class="tag na">n/a</span>':c.fmt(raw)}</td>`;}).join('')}
+      <td class="n">${cs.score==null?'<span class="tag na">n/a</span>':scoreHTML(cs.score)}${cs.pending?`<div class="mini">${cs.pending} pending</div>`:''}</td><td class="n"><b class="num">${SCORES[s.code].score.toFixed(1)}</b><div class="mini">#${SCORES[s.code].rank}</div></td></tr>`).join('')||`<tr><td colspan="${rated.length+data.length+3}" class="empty">Nothing awaiting rating – ${d.name} is complete</td></tr>`}
+    </tbody></table></div></div>`;
+  const keepScroll=()=>{ const w=$('.tbl-wrap',el); const st=w?w.scrollTop:0; viewRatings(el); const w2=$('.tbl-wrap',el); if(w2) w2.scrollTop=st; };
+  $$('[data-dept]',el).forEach(g=>g.onclick=()=>{ RSTATE.dept=g.dataset.dept; viewRatings(el); });
+  $$('[data-cell]',el).forEach(sel=>sel.onchange=()=>{ const [code,k]=sel.dataset.cell.split('|'); const v=sel.value===''?null:sel.value==='na'?'na':+sel.value; applyRating(code,k,v); keepScroll(); });
+  const rq=$('#rQ'); rq.oninput=()=>{ RSTATE.q=rq.value; viewRatings(el); const n=$('#rQ'); n.focus(); n.setSelectionRange(n.value.length,n.value.length); };
+  $('#rP').onchange=e=>{ RSTATE.pendingOnly=e.target.checked; viewRatings(el); };
+  $('#rBy').onchange=e=>{ STATE.rater=e.target.value.trim(); persist(); toast('Ratings will be recorded as '+(STATE.rater||'Demo user')); };
+  $('#rReset').onclick=()=>{ for(const code in STATE.ratings){ for(const c of rated) delete STATE.ratings[code][c.k]; } recomputeAll(); persist(); toast(`${d.name} ratings reset to submitted values`); viewRatings(el); };
 }
 function median(a){ const b=[...a].filter(v=>v!=null).sort((x,y)=>x-y); return b[Math.floor(b.length/2)]; }
 
@@ -980,31 +1136,33 @@ function viewScoring(el){
    <h1>Scoring Engine</h1><p class="sub">Configurable weighted model · every sub-metric normalised to 0–100 by portfolio percentile · unavailable metrics are excluded and weights re-based</p>
    <div class="grid g12">
     <div class="grid" style="align-content:start">
-     <div class="card"><div class="card-h"><div><h3>Category weights</h3><p class="cap">Must total 100% to apply</p></div><b class="num" style="font-size:18px;color:${total===100?'var(--good)':'var(--bad)'}">${total}%</b></div>
-      ${CATS.map(c=>`<div class="sl"><label><span>${c.name}${c.type!=='Objective'?' <span class="tag str">MGMT</span>':''}</span><span class="mini">default ${DEFAULT_WEIGHTS[c.k]}%</span></label><input type="range" min="0" max="60" step="1" value="${DRAFT[c.k]}" data-k="${c.k}"><input type="number" min="0" max="100" value="${DRAFT[c.k]}" data-k="${c.k}"></div>`).join('')}
+     <div class="card"><div class="card-h"><div><h3>Department weights</h3><p class="cap">How much each department's score counts towards the overall SKU score · must total 100%</p></div><b class="num" style="font-size:18px;color:${total===100?'var(--good)':'var(--bad)'}">${total}%</b></div>
+      ${DEPTS.map(c=>`<div class="sl"><label><span>${c.name}</span><span class="mini">default ${DEFAULT_WEIGHTS[c.k]}%</span></label><input type="range" min="0" max="60" step="1" value="${DRAFT[c.k]}" data-k="${c.k}"><input type="number" min="0" max="100" value="${DRAFT[c.k]}" data-k="${c.k}"></div>`).join('')}
       <div class="row" style="margin-top:6px"><button class="btn pri" id="wApply" ${total!==100||!changed?'disabled':''}>Apply weights</button><button class="btn" id="wReset">Reset to default</button>${total!==100?`<span class="mini down">${total>100?'Over':'Under'} by ${Math.abs(100-total)}%</span>`:''}</div>
       ${changed&&total===100?'<div class="note warn" style="margin-top:10px">Previewing unapplied weights. Apply to update all modules.</div>':''}
      </div>
      <div class="card"><h3>Model rules</h3><div style="font-size:12px;line-height:1.6;color:var(--ink-2)">
-      • <b>New products</b> (&lt;18 months) use annualised 3-month run-rate for volume; YoY growth and CAGR are marked unavailable rather than zero.<br>
-      • <b>Purchased SKUs</b> have no changeover / batch / OEE – those sub-metrics are excluded.<br>
-      • <b>Strategic Importance</b> is a management assessment, shown separately from objective metrics.<br>
+      • Each department score blends <b>system data</b> (portfolio percentile, 0–100) with the department's own <b>1–5 ratings</b> (1 → 0, 5 → 100), using the criterion weights below.<br>
+      • Ratings <b>awaiting input</b> or marked <b>N/A</b> are excluded and the remaining weights re-based – never treated as zero.<br>
+      • <b>New products</b> (&lt;18 months) use annualised 3-month run-rate for volume; YoY growth is unavailable rather than zero.<br>
+      • <b>Purchased SKUs</b> have no in-house speed / changeover / OEE / batch inputs (N/A).<br>
       • Strategic ≥4/5 with score &lt;45 → flagged as a <b>strategic exception</b> (Review, never auto-exit).<br>
-      • Action bands: ≥62 Core · ≥47 Fix · ≥37 Review · else Exit; high growth score (≥70) → Invest & Grow.</div></div>
-     <div class="card"><h3>Sub-metrics</h3><p class="cap">Equal-weighted within each category</p>${CATS.map(c=>`<div style="margin-bottom:6px"><b style="font-size:12px">${c.name}</b><div class="mini">${c.subs.map(s=>s.name).join(' · ')}</div></div>`).join('')}</div>
+      • Action bands: ≥62 Core · ≥47 Fix · ≥37 Review · else Exit; strong revenue growth (≥70th percentile) → Invest & Grow.<br>
+      • Ratings are captured in <a href="#/ratings">Department Ratings</a> or on each SKU profile.</div></div>
+     <div class="card"><h3>Department criteria</h3><p class="cap">Criterion weights within each department · <span class="tag new">R</span> department rating · <span class="tag">D</span> system data</p>${DEPTS.map(c=>`<div style="margin-bottom:8px"><b style="font-size:12px">${c.name}</b><div class="mini" style="line-height:1.6">${c.crit.map(x=>`<span class="tag ${x.src==='rated'?'new':''}" style="margin-left:0">${x.src==='rated'?'R':'D'}</span> ${x.name} ${x.w}%`).join(' · ')}</div></div>`).join('')}</div>
     </div>
     <div class="card"><div class="card-h"><div><h3>Original vs adjusted ranking</h3><p class="cap">Original = default weights · adjusted = ${changed?'draft weights (preview)':'applied weights'}</p></div></div>
-     <div class="tbl-wrap" style="max-height:calc(100vh - 230px)"><table><thead><tr><th class="n">Rank</th><th>SKU</th><th class="n">Original score</th><th class="n">Orig. rank</th><th class="n">Adjusted score</th><th class="n">Δ rank</th><th class="n">Percentile</th><th>Category scores</th><th>Action</th></tr></thead><tbody>
+     <div class="tbl-wrap" style="max-height:calc(100vh - 230px)"><table><thead><tr><th class="n">Rank</th><th>SKU</th><th class="n">Original score</th><th class="n">Orig. rank</th><th class="n">Adjusted score</th><th class="n">Δ rank</th><th class="n">Percentile</th><th>Department scores</th><th>Action</th></tr></thead><tbody>
      ${rows.map(r=>{const d=r.b.rank-r.p.rank; return `<tr class="click" onclick="location.hash='#/sku/${r.s.code}'"><td class="n"><b>${r.p.rank}</b></td><td><div style="font-weight:550">${esc(r.s.name)}</div><span class="code">${r.s.code}</span></td><td class="n">${r.b.score.toFixed(1)}</td><td class="n">${r.b.rank}</td><td class="n">${scoreHTML(r.p.score)}</td><td class="n">${d===0?'<span class="mini">–</span>':`<span class="${d>0?'up':'down'}">${d>0?'▲':'▼'} ${Math.abs(d)}</span>`}</td><td class="n">P${r.p.pct}</td><td>${catSpark(r.s.code)}</td><td>${pillHTML(r.p.action)}${r.p.action!==r.b.action?'<div class="mini">was '+ACTIONS[r.b.action].label+'</div>':''}</td></tr>`;}).join('')}
      </tbody></table></div></div>
    </div>`;
   const sync=(k,v)=>{DRAFT[k]=clamp(Math.round(+v||0),0,100); viewScoring(el);};
   $$('input[type=range][data-k]',el).forEach(i=>i.oninput=()=>{ DRAFT[i.dataset.k]=+i.value; const n=$(`input[type=number][data-k="${i.dataset.k}"]`,el); n.value=i.value; clearTimeout(i._t); i._t=setTimeout(()=>sync(i.dataset.k,i.value),120); });
   $$('input[type=number][data-k]',el).forEach(i=>i.onchange=()=>sync(i.dataset.k,i.value));
-  $('#wApply').onclick=()=>{ STATE.weights={...DRAFT}; SCORES=scorePortfolio(STATE.weights); persist(); toast('Weights applied – all modules updated'); viewScoring(el); };
+  $('#wApply').onclick=()=>{ STATE.weights={...DRAFT}; recomputeAll(); persist(); toast('Weights applied – all modules updated'); viewScoring(el); };
   $('#wReset').onclick=()=>{ DRAFT={...DEFAULT_WEIGHTS}; viewScoring(el); };
 }
-function catSpark(code){ const cs=CATSCORE[code]; return `<span style="display:inline-flex;gap:2px;align-items:flex-end;height:18px">${CATS.map(c=>{const v=cs[c.k].score; return `<span data-tip="${esc(`<b>${c.name}</b><br>${v==null?'Unavailable':v.toFixed(1)}`)}" style="width:7px;height:${v==null?3:Math.max(2,v/100*18)}px;background:${v==null?'#e2e5ea':'var(--s1)'};border-radius:2px 2px 0 0;opacity:${v==null?1:.35+v/160}"></span>`;}).join('')}</span>`; }
+function catSpark(code){ const cs=CATSCORE[code]; return `<span style="display:inline-flex;gap:2px;align-items:flex-end;height:18px">${DEPTS.map(c=>{const v=cs[c.k].score; return `<span data-tip="${esc(`<b>${c.name}</b><br>${v==null?'Unavailable':v.toFixed(1)}`)}" style="width:7px;height:${v==null?3:Math.max(2,v/100*18)}px;background:${v==null?'#e2e5ea':'var(--s1)'};border-radius:2px 2px 0 0;opacity:${v==null?1:.35+v/160}"></span>`;}).join('')}</span>`; }
 
 /* =========================================================================
    VIEW 5 — SCENARIO SIMULATOR
@@ -1176,7 +1334,7 @@ function route_(){
   if(route!=='scoring') DRAFT=null;
   const c=$('#content'); const keep=c.dataset.route===h; const st=c.scrollTop;
   c.innerHTML='<div class="view"></div>'; const el=c.firstChild; if(keep) el.style.animation='none';
-  ({dashboard:viewDashboard,quadrant:viewQuadrant,skus:viewSkus,scoring:viewScoring,scenario:viewScenario,recs:viewRecs,sku:e=>viewSku(e,arg)})[route](el);
+  ({dashboard:viewDashboard,quadrant:viewQuadrant,skus:viewSkus,ratings:viewRatings,scoring:viewScoring,scenario:viewScenario,recs:viewRecs,sku:e=>viewSku(e,arg)})[route](el);
   if(keep) c.scrollTop=st; else c.scrollTop=0; c.dataset.route=h; TT.style.opacity=0;
 }
 window.addEventListener('hashchange',route_);
@@ -1188,7 +1346,7 @@ route_();
    ========================================================================= */
 window.PENBEV_TESTS=function(){
   const T=[]; const ok=(n,c)=>T.push({test:n,pass:!!c});
-  const s1=scorePortfolio({fin:100,vol:0,mfg:0,log:0,grow:0,strat:0,dist:0}); ok('Score weighting: 100% financial = financial category score', Math.abs(s1['CC-500P'].score-CATSCORE['CC-500P'].fin.score)<1e-9);
+  const s1=scorePortfolio({fin:100,com:0,mfg:0,log:0,sc:0}); ok('Score weighting: 100% Finance = Finance department score', Math.abs(s1['CC-500P'].score-CATSCORE['CC-500P'].fin.score)<1e-9);
   ok('Revenue aggregation: channel split sums to total', Math.abs(sum(CHANNELS.map(c=>skuMetrics(SKUS[0],{channel:c}).rev))-skuMetrics(SKUS[0]).rev)<1);
   ok('Revenue aggregation: region split sums to total', Math.abs(sum(REGIONS.map(r=>skuMetrics(SKUS[3],{region:r.a}).rev))-skuMetrics(SKUS[3]).rev)<1);
   const a=calcScenario({...newScenario(),removed:['FAN-PN-440C'],a:{...DEFAULT_ASSUMP,migration:0}}), b=calcScenario({...newScenario(),removed:['FAN-PN-440C'],a:{...DEFAULT_ASSUMP,migration:50}});
@@ -1196,10 +1354,13 @@ window.PENBEV_TESTS=function(){
   ok('Migration: 50% migration retains half revenue', Math.abs(b.migrated-b.revAtRisk*0.5)<1);
   ok('Financial impact: recurring = -lost + recovered + savings', Math.abs(b.recurring-(-b.lostContr+b.recovered+b.mfg+b.packSave+b.logS))<1);
   ok('Financial impact: overhead excluded from savings', b.residual>0 && b.recurring<b.residual+b.mfg+b.logS);
-  ok('Missing data: purchased SKU changeover is unavailable (not zero)', SUBS['APL-AP-300C'].chg===null);
-  ok('Missing data: new SKU CAGR unavailable', ECO['CNS-440C'].cagr===null && SUBS['CNS-440C'].cagr===null);
+  ok('Missing data: purchased SKU OEE unavailable (not zero)', DATA_SC['APL-AP-300C'].eff===null && critScore('APL-AP-300C',DEPT.mfg.crit[0]).status==='na');
+  ok('Missing data: new SKU growth unavailable', ECO['CNS-440C'].cagr===null && DATA_SC['CNS-440C'].rg===null);
+  ok('Pending ratings excluded, not zeroed', CATSCORE['CNS-440C'].sc.score===null && CATSCORE['CNS-440C'].sc.pending===5);
+  { const k='CC-300G', L=['load','store','damage','shelf'], saved=JSON.stringify(STATE.ratings), b0=SCORES[k].score; L.forEach(c=>setRating(k,c,5)); recomputeAll(); const up=SCORES[k].score>b0; L.forEach(c=>setRating(k,c,1)); recomputeAll(); const dn=SCORES[k].score<b0; STATE.ratings=JSON.parse(saved); recomputeAll(); ok('Department rating changes flow into overall score', up&&dn&&Math.abs(SCORES[k].score-b0)<1e-9); }
+  ok('Department weights total 100 and criteria weights total 100', sum(Object.values(DEFAULT_WEIGHTS))===100 && DEPTS.every(d=>sum(d.crit.map(c=>c.w))===100));
   ok('New product: never recommended for exit', SKUS.filter(s=>ECO[s.code].lifecycle==='New').every(s=>SCORES[s.code].action!=='exit'));
-  ok('New product: volume uses run-rate', RAWV['CNS-440C'].cases===ECO['CNS-440C'].runRateVol);
+  ok('New product: volume uses run-rate', DATA_RAW['CNS-440C'].cases===ECO['CNS-440C'].runRateVol);
   console.table(T); return T.every(t=>t.pass);
 };
 </script>
